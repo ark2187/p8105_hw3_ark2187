@@ -1,0 +1,216 @@
+---
+title: "Hw 3"
+author: "Amanda Kramer"
+collaborator: "Charles Biggar aka also Amanda Kramer"
+note: "this is Charles Biggar's computer, so it will show him as a collaborator"
+date: 10/10/20
+output: github_document
+---
+install.packages("tidylog")
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(p8105.datasets)
+library(knitr)
+library("dplyr")
+library("tidyr")
+library("tidylog", warn.conflicts = FALSE)
+data("instacart")
+data("ny_noaa")
+
+```
+## Problem 1
+
+The dataset `instacart` has `r nrow(instacart)` observations, with `r ncol(instacart)` variables. The data tracks products and thier corresponding order, providing information like `order_number`, `product_name`, and its corresponding `aisle`. We can learn things like the proportion of products that were reordered (`r mean(pull(instacart, reordered))`) or the average number of days since prior order (`r mean(pull(instacart, days_since_prior_order))`).
+
+
+*   How many aisles are there, and which aisles are the most items ordered from?
+
+```{r}
+instacart %>% 
+group_by (aisle_id) %>% 
+  summarize (n_obs = n()) %>% 
+arrange(desc(n_obs))
+```
+There are 134 aisles, and aisles 83, 24, and 123 are the most ordered from.
+
+*   Make a plot that shows the number of items ordered in each aisle, limiting this to aisles with more than 10000 items ordered. Arrange aisles sensibly, and organize your plot so others can read it.
+
+```{r}
+instacart %>%
+  group_by (aisle_id) %>% 
+  summarize (n_obs = n()) %>% 
+  filter(n_obs > 10000) %>% 
+  arrange(aisle_id) %>% 
+    ggplot(aes(x = aisle_id, y = n_obs, color=n_obs)) + 
+    geom_point() +
+    labs(title = "Number of items ordered per aisle", 
+    x = "Aisle Number", 
+    y = "Nmber items ordered")
+```
+
+*   Make a table showing the three most popular items in each of the aisles “baking ingredients”, “dog food care”, and “packaged vegetables fruits”. Include the number of times each item is ordered in your table.
+
+```{r}
+instacart %>% 
+group_by (aisle, product_name) %>% 
+  summarize (n_obs = n()) %>% 
+filter (aisle == "baking ingredients" | aisle == "dog food care" | aisle == "packaged vegetables fruits") %>% 
+top_n(3, n_obs) %>% 
+knitr::kable()
+```
+
+
+*   Make a table showing the mean hour of the day at which Pink Lady Apples and Coffee Ice Cream are ordered on each day of the week; format this table for human readers (i.e. produce a 2 x 7 table).
+
+
+```{r}
+instacart %>% 
+group_by (product_name, order_dow) %>%
+  summarize(mean_hour = mean(order_hour_of_day)) %>% 
+filter (product_name == "Pink Lady Apples" | product_name == "Coffee Ice Cream") %>%
+  pivot_wider(
+    names_from = order_dow,
+    values_from = mean_hour) %>% 
+knitr::kable()  
+```
+
+## Problem 2
+
+*   Load, tidy, and otherwise wrangle the data. Your final dataset should include all originally observed variables and values; have useful variable names; include a weekday vs weekend variable; and encode data with reasonable variable classes. Describe the resulting dataset (e.g. what variables exist, how many observations, etc).
+
+```{r}
+accel = 
+  read_csv("./accel_data.csv") %>% 
+  janitor::clean_names() %>% 
+  mutate(day = factor(day, labels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")),
+         weekend = as.numeric(if_else(day == "Saturday" | day == "Sunday", "1", "0"))) %>% 
+  select (week, day_id, day, weekend, everything()) %>% 
+  arrange (week, day)
+```
+
+The dataset `accel` has `r nrow(accel)` observations, with `r ncol(accel)` variables. The data tracks one man's activity every day, reporting activity every minute. A unit of activity is captued every minute and is represented in our data set with varaibles `acitvity_1` through `activity_1440`.
+
+*   Traditional analyses of accelerometer data focus on the total activity over the day. Using your tidied dataset, aggregate accross minutes to create a total activity variable for each day, and create a table showing these totals. Are any trends apparent?
+
+```{r}
+accel_2 =
+  accel %>% 
+  pivot_longer(
+    activity_1:activity_1440,
+    names_to = "minute",
+    values_to = "activity") %>% 
+  group_by(week, day_id, day, weekend) %>% 
+  summarize(daily_tot = sum(activity))
+knitr::kable(accel_2)
+```
+
+This data show the mean activity per day: Monday - `r mean(pull(filter(accel_2, day=="Monday"), daily_tot))`, Tuesday - `r mean(pull(filter(accel_2, day=="Tuesday"), daily_tot))`, Wednesday - `r mean(pull(filter(accel_2, day=="Wednesday"), daily_tot))`, Thursday - `r mean(pull(filter(accel_2, day=="Thursday"), daily_tot))`, Friday - `r mean(pull(filter(accel_2, day=="Friday"), daily_tot))`, Saturday - `r mean(pull(filter(accel_2, day=="Saturday"), daily_tot))`, and Sunday - `r mean(pull(filter(accel_2, day=="Sunday"), daily_tot))`. This indicates that Mondays are the most active day of the week.
+
+The mean weekday value is `r mean(pull(filter(accel_2, weekend==0), daily_tot))` and mean weekend value is `r mean(pull(filter(accel_2, weekend==1), daily_tot))`, showing that weekends are slightly more active than weekdays.
+
+*   Accelerometer data allows the inspection activity over the course of the day. Make a single-panel plot that shows the 24-hour activity time courses for each day and use color to indicate day of the week. Describe in words any patterns or conclusions you can make based on this graph.
+
+```{r}
+accel_plot = 
+  accel %>% 
+  
+  pivot_longer(
+    activity_1:activity_1440,
+    names_to = "minute",
+    values_to = "activity") %>% 
+  group_by(day_id)%>%
+    
+ggplot(aes(x= (minute), y=activity, group = factor(day_id), color = day)) + 
+  
+  geom_point() + geom_line() +
+  labs(title = "24 hour activity courses for each day", 
+    x = "day", 
+    y = "activity unit")
+accel_plot
+```
+
+ This chart appears to show that activity spikes in the mid/morning of the day, as is to be expected given typical sleep schedules. They also have a spike towards the end of the day. This person appears to be slightly more active over the Mondays and Thursdays, with some late night activity on Wednesdays.
+
+## Problem 3
+
+* write a short description of the dataset, noting the size and structure of the data, describing some key variables, and indicating the extent to which missing data is an issue.
+
+* Do some data cleaning. Create separate variables for year, month, and day. Ensure observations for temperature, precipitation, and snowfall are given in reasonable units. 
+
+
+view(ny_noaa)
+
+The dataset `ny_noaa` has `r nrow(ny_noaa)` observations, with `r ncol(ny_noaa)` variables. The data percipitatio, providing information like `prcp`, `snow`, and its corresponding `tmax` and `tmin`. There are a large number of missing variables, but due to the large volume of data, it should not be an issue.
+
+* For snowfall, what are the most commonly observed values? Why? comment on results 
+  
+```{r}
+library(p8105.datasets)
+data("ny_noaa")
+
+#summarize(ny_noaa, mean(tmax, na.rm = TRUE))
+
+noaa_data = ny_noaa %>%
+separate(date, into = c("year", "month", "day"), convert = TRUE) %>%
+   mutate(
+    prcp = prcp*10,
+    tmin = as.numeric(tmin),
+    tmax = as.numeric(tmax)
+  )
+
+#snowfall
+
+noaa_data %>%
+  mutate(snow = as.character(snow)) %>%
+  count(snow)%>%
+  arrange(desc(n))
+
+```
+The most common snowfall measure was 0 inches, and second was NA. The amount is missing data is concerning, but otherwise it does not snow for most of the year in NY, so 0 inches is appropriate. If NA represents 0, then it should be coded accordingly.
+
+
+* Make a two-panel plot showing the average max temperature in January and in July in each station across years. Is there any observable / interpretable structure? Any outliers? Comment on results 
+
+```{r}
+noaa_data %>%
+filter(month %in% c(1, 7)) %>%
+group_by(id, year, month) %>%
+mutate(avtmax = mean(tmax, na.rm = TRUE, group = month)) %>%
+ggplot(aes(x = year, y = avtmax)) +
+geom_point() +
+facet_grid(month ~ .)+
+labs(title = "Mean avge temperature for January and July across stations and years", x = "year", y = "average maximum temperature (C)") +
+theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+There are noticable differences, as the temperatures are much colder in January than July. there are some outliers in 1986/87 of a cold July day, and an extraordinarily cold day in January of 2010.
+
+* Make a two-panel plot showing tmax vs tmin for the full dataset (note that a scatterplot may not be the best option); and 
+* make a plot showing the distribution of snowfall values greater than 0 and less than 100 separately by year
+
+```{r}
+library(plotly)
+library(patchwork)
+
+tmax_plot = noaa_data %>%
+  ggplot(aes(x=tmax, y=tmin)) +
+  geom_hex()
+
+snow_plot = noaa_data %>%
+  filter(snow<100, snow>0) %>%
+  group_by(year)%>%
+  ggplot(aes(x=snow, group=year)) +
+  geom_density()
+
+tmax_plot + snow_plot
+```
+
+The first plot shows that there is a large amount of data in the normal day-to-day range of values in temperature, with lesser amounts of data as the plot spreads out. Additionally, it shows that there is a large amount of snowfall each year, following a very similar curve each year. 
+
+
+
+
+
